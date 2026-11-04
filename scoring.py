@@ -16,6 +16,8 @@ function holding your combining rule. The grader checks your code against what
 you claim, so that line should read `scoring.py::combine_signals`.
 """
 
+import math
+
 import config
 
 
@@ -52,11 +54,15 @@ def combine_signals(model_score: float, style_score: float) -> float:
     The weights in config.py are placeholders. Change them, or ignore them and
     write a different rule.
     """
-    # TODO: replace this
-    return (
-        config.WEIGHT_MODEL_SIGNAL * model_score
-        + config.WEIGHT_STYLE_SIGNAL * style_score
-    )
+    for value in (model_score, style_score):
+        if not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
+            raise ValueError("Signal scores must be finite numbers between 0 and 1.")
+    score = (config.WEIGHT_MODEL_SIGNAL * model_score
+             + config.WEIGHT_STYLE_SIGNAL * style_score)
+    if abs(model_score - style_score) > config.DISAGREEMENT_THRESHOLD:
+        score = min(max(score, config.HUMAN_THRESHOLD + 0.01), config.AI_THRESHOLD - 0.01)
+    return round(score, 4)
+
 
 
 def score_to_label(score: float) -> tuple[str, str]:

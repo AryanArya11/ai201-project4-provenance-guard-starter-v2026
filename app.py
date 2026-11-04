@@ -31,6 +31,8 @@ from flask import Flask, jsonify, request
 import audit
 import config
 import detector
+import scoring
+import stylometry
 
 app = Flask(__name__)
 
@@ -220,15 +222,18 @@ def submit():
         return jsonify(error="detector_unavailable", message="The local detector is unavailable. Install the dependencies and run python detector.py."), 503
     except ValueError:
         return jsonify(error="invalid_input", message="Text is too short to score. Send a few sentences."), 400
+    style_score = stylometry.style_signal(text)
+    combined_score = scoring.combine_signals(model_score, style_score)
     content_id = str(uuid.uuid4())
     entry = audit.log_decision(
         content_id=content_id, creator_id=creator_id.strip(),
-        guess="unsure", model_score=model_score, combined_score=model_score,
+        guess="unsure", model_score=model_score, style_score=style_score,
+        combined_score=combined_score,
         label="One-signal milestone: label not connected yet.",
     )
     return jsonify(content_id=content_id, guess=entry["guess"],
-                   confidence=model_score, label=entry["label"],
-                   model_score=model_score, style_score=None, status=entry["status"])
+                   confidence=combined_score, label=entry["label"],
+                   model_score=model_score, style_score=style_score, status=entry["status"])
 
 
 @app.post("/appeal")
