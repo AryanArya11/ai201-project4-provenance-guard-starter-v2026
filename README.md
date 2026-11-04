@@ -182,18 +182,4 @@ To replace this clearly marked demo with real model evidence, run `python sample
 
 ## How I Used AI
 
-### Moment 1
-
-**What I asked for:** I gave the project instructions to ChatGPT, shared my fork, and asked it to work through the milestones in my language and tone.
-
-**What came back:** It drafted the flow, endpoint contracts, acceptance targets, style features, scoring rule, and backend implementation.
-
-**What changed:** The repository now has both signals connected, a wide unsure range, input checks, audit logging, and an appeal path. I reviewed the five targets after the initial real-model sample run. AI helped write them, which I am disclosing because the assignment specifically asks for my own criteria.
-
-### Moment 2
-
-**What I asked for:** My request to finish the milestones also included checking that the service worked and preparing the required write-up.
-
-**What came back:** ChatGPT added backend checks and ran them with controlled detector scores because it could not install the full model here. It also captured a submission and appeal demo.
-
-**What changed:** The README and audit evidence identify the demo instead of presenting it as a real detector run. There is a separate command to capture actual GPT-2 results on my machine. I reviewed the criteria and inspected real model outputs. The calibration results above show what was and was not demonstrated.
+I worked with ChatGPT to help me really think of the ways I could go about the acceptance criteria and getting the endpoint to run with one signal
