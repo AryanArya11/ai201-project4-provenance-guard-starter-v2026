@@ -70,8 +70,8 @@ WEIGHT_STYLE_SIGNAL = 0.25
 # getting through. There is no setting that avoids the trade — only settings
 # that decide who pays for it.
 
-HUMAN_THRESHOLD = 0.25
-AI_THRESHOLD = 0.80
+HUMAN_THRESHOLD = 0.45
+AI_THRESHOLD = 0.70
 DISAGREEMENT_THRESHOLD = 0.50
 STYLE_WEIGHT_REGULARITY = 0.50
 STYLE_WEIGHT_REPETITION = 0.30

@@ -1,6 +1,6 @@
 # Acceptance criteria — Provenance Guard
 
-**AI-assisted draft, written before implementation or scoring runs. Aryan needs to review these targets before submitting.** These are targets, not claims that the system has already passed. In Unit 8, I will keep the original targets and report misses honestly.
+**AI-assisted criteria. ChatGPT drafted these targets before implementation or scoring runs. I reviewed and accepted them after the initial real-model sample run.** These are targets, not claims that the system has already passed. In Unit 8, I will keep the original targets and report misses honestly.
 
 ## 1. Limit false accusations on human writing
 

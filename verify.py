@@ -55,8 +55,8 @@ class BackendChecks(unittest.TestCase):
             self.assertEqual(response.json['guess'], expected)
 
     def test_label_boundaries_and_complete_range(self):
-        self.assertEqual(scoring.score_to_label(0.25)[0], 'human')
-        self.assertEqual(scoring.score_to_label(0.80)[0], 'ai')
+        self.assertEqual(scoring.score_to_label(config.HUMAN_THRESHOLD)[0], 'human')
+        self.assertEqual(scoring.score_to_label(config.AI_THRESHOLD)[0], 'ai')
         self.assertEqual(scoring.score_to_label(0.51)[0], 'unsure')
         self.assertEqual(scoring.score_to_label(0.95)[0], 'ai')
         for i in range(1001):

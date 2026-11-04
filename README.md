@@ -59,12 +59,12 @@ The rule lives in **`scoring.py::combine_signals`**. The plan was recorded befor
 ```text
 combined = 0.75 * model_score + 0.25 * style_score
 if abs(model_score - style_score) > 0.50:
-    keep combined between 0.26 and 0.79
+    keep combined between 0.46 and 0.69
 ```
 
 The model counts more because the style signal is simpler and easier to change. If the two signals strongly disagree, I keep the result inside the unsure range. Weights and thresholds are in `config.py`.
 
-For example, model score 0.95 and style score 0.20 first produce 0.7625, which stays unsure. Model score 0.10 and style score 0.90 first produce 0.30, which also stays unsure. These are arithmetic examples, not observed GPT-2 results. An actual text where the two signals disagree has not been verified in this environment.
+For example, model score 0.95 and style score 0.20 first produce 0.7625. Because the signals differ by more than 0.50, the revised rule limits that result to 0.69, which is unsure. Model score 0.10 and style score 0.90 first produce 0.30 and are limited to 0.46, also unsure. These are arithmetic examples; actual text results appear below.
 
 The API field `confidence` is the combined **AI-likelihood score**, following the starter's direction: 0 means more human-like and 1 means more AI-like. A human label therefore has a low value in this field. It is not a calibrated probability or the probability that the selected label is correct.
 
@@ -72,25 +72,38 @@ The API field `confidence` is the combined **AI-likelihood score**, following th
 
 `python verify.py` passed all 16 backend checks. They cover input validation, all three labels through the route with controlled signals, 1,001 score points and threshold boundaries, signal disagreement, audit entries, missing models, and ten valid appeals. The tests use a temporary audit log and a mocked detector. They do not measure detection accuracy.
 
-The full GPT-2 run could not be completed here because package/model downloads were blocked. Real-text score separation, real-text coverage of all three labels, the four calibration samples, and the human false-positive rate are still unverified. I am not counting controlled test scores as model results. `calibrate.py` can run source-labeled samples after the model is installed:
+### Actual four-text calibration and threshold revision
 
-```powershell
-.\.venv\Scripts\python.exe calibrate.py calibration_inputs.json
-```
+I first ran the four texts with human scores at or below 0.25 and AI scores at or above 0.80. All four received unsure. The original results are preserved in `results/calibration_before_thresholds.json` and `.md`; the original decisions also remain in the audit log.
 
-That input file must contain at least four objects with `name`, `source`, and `text`: known AI, known human, formal human, and lightly edited AI. Use actual human writing for the human samples. The script saves both signals and the combined score to `results/calibration.json` and reports whether all three labels appeared. I have not invented human-written examples or claimed these calibration runs happened.
+The combined scores were 0.7272 for unedited AI, 0.6427 for my casual paragraph, 0.4314 for my formal paragraph, and 0.6438 for edited AI. The style scores were close together, from 0.4829 to 0.5328, so the model signal was doing most of the separating. I think the style signal is still weak on this small set, and I do not want to hide that.
 
-The five targets in [criteria.md](criteria.md) are an **AI-assisted draft for me to review**. They were committed before implementation and scoring runs. The assignment asks me to choose my own targets, so that review is still required. I have not claimed the draft meets that authorship requirement or that all five targets passed.
+After inspecting these calibration results, I changed `HUMAN_THRESHOLD` to 0.45 and `AI_THRESHOLD` to 0.70 in `config.py`. Scores at or below 0.45 receive human, scores at or above 0.70 receive AI, and scores in between receive unsure. The weights stayed at 0.75 for the model and 0.25 for style. Strong disagreements still stay unsure; the clamp is now 0.46 through 0.69 because it follows the configured boundaries.
+
+This is a calibration-based change, not an independent accuracy result. I chose these thresholds after seeing these four texts and reran the same texts. The labels describe heuristic score bands, not proven probabilities. The narrower unsure range may produce more false accusations on unseen human writing. My original acceptance targets have not changed; the larger Unit 8 evaluation will test that tradeoff.
+
+I supplied the two human paragraphs from my writing. ChatGPT generated the AI paragraph and the edited AI paragraph. The rerun used actual `POST /submit` requests through Flask's test client with local GPT-2, and each decision was logged.
+
+| Sample | Model | Style | Combined | Label |
+|---|---:|---:|---:|---|
+| Unedited AI | 0.7920 | 0.5328 | 0.7272 | ai |
+| Plain human | 0.6943 | 0.4879 | 0.6427 | unsure |
+| Formal human | 0.4125 | 0.4880 | 0.4314 | human |
+| Lightly edited AI | 0.6974 | 0.4829 | 0.6438 | unsure |
+
+All three labels appeared on actual text submissions after this revision.
+
+The largest signal difference in the rerun was on Unedited AI: model 0.7920, style 0.5328, combined 0.7272, and label ai. The disagreement cutoff remains a difference greater than 0.50.
 
 ## Label Variants
 
 | Label | Score range | Exact text |
 |---|---|---|
-| High-confidence human | 0 ≤ score ≤ 0.25 | This writing looks like it was written by a person. This check cannot prove who wrote it. |
-| Unsure | 0.25 < score < 0.80 | We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree. |
-| High-confidence AI | 0.80 ≤ score ≤ 1 | This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review. |
+| High-confidence human | 0 <= score <= 0.45 | This writing looks like it was written by a person. This check cannot prove who wrote it. |
+| Unsure | 0.45 < score < 0.70 | We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree. |
+| High-confidence AI | 0.70 <= score <= 1 | This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review. |
 
-I worded the unsure label this way because I do not want uncertainty to sound like an accusation. I think it should tell the writer what the system actually knows and give them a next step. None of the labels proves who wrote the text.
+I kept the unsure wording because I do not want uncertainty to sound like an accusation. The high-confidence names refer to the configured score bands. The scores are not calibrated probabilities, and none of these labels proves authorship.
 
 ## Sample Run
 
@@ -175,7 +188,7 @@ To replace this clearly marked demo with real model evidence, run `python sample
 
 **What came back:** It drafted the flow, endpoint contracts, acceptance targets, style features, scoring rule, and backend implementation.
 
-**What changed:** The repository now has both signals connected, a wide unsure range, input checks, audit logging, and an appeal path. I have not independently rewritten the five targets yet. AI helped write them, which I am disclosing because the assignment specifically asks for my own criteria.
+**What changed:** The repository now has both signals connected, a wide unsure range, input checks, audit logging, and an appeal path. I reviewed the five targets after the initial real-model sample run. AI helped write them, which I am disclosing because the assignment specifically asks for my own criteria.
 
 ### Moment 2
 
@@ -183,4 +196,4 @@ To replace this clearly marked demo with real model evidence, run `python sample
 
 **What came back:** ChatGPT added backend checks and ran them with controlled detector scores because it could not install the full model here. It also captured a submission and appeal demo.
 
-**What changed:** The README and audit evidence identify the demo instead of presenting it as a real detector run. There is a separate command to capture actual GPT-2 results on my machine. I still need to review the criteria and inspect real model outputs before calling the project fully verified.
+**What changed:** The README and audit evidence identify the demo instead of presenting it as a real detector run. There is a separate command to capture actual GPT-2 results on my machine. I reviewed the criteria and inspected real model outputs. The calibration results above show what was and was not demonstrated.
