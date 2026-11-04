@@ -1,0 +1,53 @@
+{
+  "mode": "real_gpt2",
+  "note": "The sample text was AI-written; no accuracy claim is made about its authorship.",
+  "submit_request": {
+    "text": "I spent most of the afternoon trying to figure out why my program was stuck. Then I noticed the counter was inside the wrong loop. That was it. I moved it, ran the program again, and finally got the result I expected.",
+    "creator_id": "sample-writer"
+  },
+  "submit_status": 200,
+  "submit_response": {
+    "confidence": 0.689,
+    "content_id": "ccaf1ad4-8c40-45d3-96d6-2356fd103729",
+    "guess": "unsure",
+    "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+    "model_score": 0.7484,
+    "status": "decided",
+    "style_score": 0.5108
+  },
+  "appeal_request": {
+    "content_id": "ccaf1ad4-8c40-45d3-96d6-2356fd103729",
+    "reasoning": "I wrote this myself and can share my earlier drafts."
+  },
+  "appeal_status": 200,
+  "appeal_response": {
+    "content_id": "ccaf1ad4-8c40-45d3-96d6-2356fd103729",
+    "message": "Your appeal has been recorded and the submission is under review.",
+    "status": "under_review"
+  },
+  "log_response": {
+    "count": 2,
+    "entries": [
+      {
+        "combined_score": 0.689,
+        "content_id": "ccaf1ad4-8c40-45d3-96d6-2356fd103729",
+        "creator_id": "sample-writer",
+        "evidence_mode": "real_gpt2",
+        "guess": "unsure",
+        "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+        "model_score": 0.7484,
+        "status": "decided",
+        "style_score": 0.5108,
+        "timestamp": "2026-11-04T07:10:27+00:00"
+      },
+      {
+        "content_id": "ccaf1ad4-8c40-45d3-96d6-2356fd103729",
+        "creator_id": "sample-writer",
+        "event": "appeal",
+        "reasoning": "I wrote this myself and can share my earlier drafts.",
+        "status": "under_review",
+        "timestamp": "2026-11-04T07:10:27+00:00"
+      }
+    ]
+  }
+}
