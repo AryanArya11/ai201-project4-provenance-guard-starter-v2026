@@ -30,6 +30,7 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import detector
 
 app = Flask(__name__)
 
@@ -199,17 +200,35 @@ def submit():
     what should this do when `text` is missing, empty, or enormous? A crash on
     a malformed input is one of the most common real failures there is.
     """
-    payload = request.get_json(silent=True) or {}
-
-    # TODO: delete this and build the route.
-    return jsonify({
-        "error": "not_implemented",
-        "message": "POST /submit isn't built yet — see the TODO in app.py.",
-        "you_sent": {
-            "text_length": len(payload.get("text", "")),
-            "creator_id": payload.get("creator_id"),
-        },
-    }), 501
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(error="invalid_input", message="Send a JSON object."), 400
+    text = payload.get("text")
+    creator_id = payload.get("creator_id")
+    if not isinstance(text, str) or not text.strip():
+        return jsonify(error="invalid_input", message="text must be a nonempty string."), 400
+    if not isinstance(creator_id, str) or not creator_id.strip():
+        return jsonify(error="invalid_input", message="creator_id must be a nonempty string."), 400
+    if len(text) > config.MAX_TEXT_CHARACTERS:
+        return jsonify(error="text_too_large", message="text must be at most 10000 characters."), 413
+    if len(creator_id) > 200:
+        return jsonify(error="invalid_input", message="creator_id must be at most 200 characters."), 400
+    try:
+        model_score = detector.model_signal(text)
+    except detector.DetectorUnavailable:
+        app.logger.exception("The local detector could not load")
+        return jsonify(error="detector_unavailable", message="The local detector is unavailable. Install the dependencies and run python detector.py."), 503
+    except ValueError:
+        return jsonify(error="invalid_input", message="Text is too short to score. Send a few sentences."), 400
+    content_id = str(uuid.uuid4())
+    entry = audit.log_decision(
+        content_id=content_id, creator_id=creator_id.strip(),
+        guess="unsure", model_score=model_score, combined_score=model_score,
+        label="One-signal milestone: label not connected yet.",
+    )
+    return jsonify(content_id=content_id, guess=entry["guess"],
+                   confidence=model_score, label=entry["label"],
+                   model_score=model_score, style_score=None, status=entry["status"])
 
 
 @app.post("/appeal")
