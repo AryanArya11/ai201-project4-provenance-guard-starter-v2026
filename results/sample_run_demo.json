@@ -1,0 +1,54 @@
+{
+  "mode": "controlled_test_double",
+  "note": "The sample text was AI-written; no accuracy claim is made about its authorship.",
+  "submit_request": {
+    "text": "I spent most of the afternoon trying to figure out why my program was stuck. Then I noticed the counter was inside the wrong loop. That was it. I moved it, ran the program again, and finally got the result I expected.",
+    "creator_id": "sample-writer"
+  },
+  "submit_status": 200,
+  "submit_response": {
+    "confidence": 0.5927,
+    "content_id": "1cf8c7ed-5beb-4c90-b00e-cc70776ff19a",
+    "guess": "unsure",
+    "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+    "model_score": 0.62,
+    "status": "decided",
+    "style_score": 0.5108
+  },
+  "appeal_request": {
+    "content_id": "1cf8c7ed-5beb-4c90-b00e-cc70776ff19a",
+    "reasoning": "I wrote this myself and can share my earlier drafts."
+  },
+  "appeal_status": 200,
+  "appeal_response": {
+    "content_id": "1cf8c7ed-5beb-4c90-b00e-cc70776ff19a",
+    "message": "Your appeal has been recorded and the submission is under review.",
+    "status": "under_review"
+  },
+  "log_response": {
+    "count": 2,
+    "entries": [
+      {
+        "combined_score": 0.5927,
+        "content_id": "1cf8c7ed-5beb-4c90-b00e-cc70776ff19a",
+        "creator_id": "sample-writer",
+        "evidence_mode": "controlled_test_double",
+        "guess": "unsure",
+        "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+        "model_score": 0.62,
+        "status": "decided",
+        "style_score": 0.5108,
+        "timestamp": "2026-11-04T06:49:00+00:00"
+      },
+      {
+        "content_id": "1cf8c7ed-5beb-4c90-b00e-cc70776ff19a",
+        "creator_id": "sample-writer",
+        "event": "appeal",
+        "evidence_mode": "controlled_test_double",
+        "reasoning": "I wrote this myself and can share my earlier drafts.",
+        "status": "under_review",
+        "timestamp": "2026-11-04T06:49:00+00:00"
+      }
+    ]
+  }
+}
