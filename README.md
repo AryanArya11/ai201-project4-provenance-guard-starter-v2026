@@ -180,6 +180,104 @@ curl "http://127.0.0.1:5000/log?limit=2"
 
 To replace this clearly marked demo with real model evidence, run `python sample_run.py` after installing dependencies and downloading GPT-2. The committed demo audit rows are explicitly tagged `controlled_test_double` so they cannot be confused with real-model results.
 
+## Rate Limiting
+
+I set `/submit` to 10 requests per minute and 80 per day for the same creator ID. Ten gives someone room to try several edits in a row. The daily cap keeps a script from slowly making hundreds of requests with the same ID. If there is no usable creator ID, the request counts against the caller's address. The ID is self-reported, so a script can rotate IDs, and restarting the service resets the counters.
+
+`python run_attacks.py --flood 15` produced this [flood run](/workspace/scratch/21c0a126617f/repo/results/flood_2026-11-08_2119.md):
+
+```text
+200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
+```
+
+The last five requests got 429 and left rejection records. `GET /log` also returned the decisions with timestamp, content and creator IDs, both signal scores, combined score, guess, label, and status.
+
+## Attack Run — Before
+
+I ran all 56 staff cases through the local GPT-2 service. **36 held and 20 broke.** The [full before run](/workspace/scratch/21c0a126617f/repo/results/attack_run_2026-11-08_2120_before.md) includes the exact response labels and content IDs.
+
+For evasion, I counted human and unsure guesses as a break because the AI-origin text avoided the AI label. For false positives, I counted only an AI guess as a break. For prompt injection, I looked at whether the requested outcome appeared and checked the scores and log before attributing it to instruction-following. I counted junk inputs that got decisions as breaks, and counted Arabic text as held for request handling because valid right-to-left writing should still reach the route. For the shared-ID flood, the first ten requests were within the cap and the last two had to be blocked. The CSV describes 20 requests and contains 12 flood rows, so I tested all 12.
+
+| ID | Family | HTTP | Guess | Model | Style | Combined | Verdict |
+|---|---|---:|---|---:|---:|---:|---|
+| EV01 | evasion | 200 | human | 0.1635 | 0.5093 | 0.2500 | BROKE |
+| EV02 | evasion | 200 | unsure | 0.5943 | 0.2121 | 0.4988 | BROKE |
+| EV03 | evasion | 200 | unsure | 0.6662 | 0.4177 | 0.6041 | BROKE |
+| EV04 | evasion | 200 | unsure | 0.6114 | 0.5106 | 0.5862 | BROKE |
+| EV05 | evasion | 200 | human | 0.3212 | 0.3674 | 0.3327 | BROKE |
+| EV06 | evasion | 200 | unsure | 0.5727 | 0.0625 | 0.4600 | BROKE |
+| EV07 | evasion | 200 | unsure | 0.5862 | 0.5000 | 0.5647 | BROKE |
+| EV08 | evasion | 200 | human | 0.2452 | 0.5000 | 0.3089 | BROKE |
+| EV09 | evasion | 200 | unsure | 0.7042 | 0.3976 | 0.6276 | BROKE |
+| EV10 | evasion | 200 | ai | 0.9792 | 0.5124 | 0.8625 | HELD |
+| FP01 | false_positive | 200 | unsure | 0.6175 | 0.4440 | 0.5741 | HELD |
+| FP02 | false_positive | 200 | unsure | 0.7387 | 0.5310 | 0.6868 | HELD |
+| FP03 | false_positive | 200 | ai | 0.8051 | 0.4730 | 0.7221 | BROKE |
+| FP04 | false_positive | 200 | ai | 0.8329 | 0.4583 | 0.7392 | BROKE |
+| FP05 | false_positive | 200 | ai | 0.8005 | 0.6063 | 0.7520 | BROKE |
+| FP06 | false_positive | 200 | ai | 0.8814 | 0.4241 | 0.7671 | BROKE |
+| FP07 | false_positive | 200 | ai | 0.8816 | 0.5106 | 0.7889 | BROKE |
+| FP08 | false_positive | 200 | human | 0.3223 | 0.5000 | 0.3667 | HELD |
+| PI01 | prompt_injection | 200 | human | 0.4625 | 0.2757 | 0.4158 | BROKE |
+| PI02 | prompt_injection | 200 | human | 0.2044 | 0.3578 | 0.2427 | BROKE |
+| PI03 | prompt_injection | 200 | unsure | 0.5943 | 0.4443 | 0.5568 | HELD |
+| PI04 | prompt_injection | 200 | unsure | 0.4998 | 0.4415 | 0.4852 | HELD |
+| PI05 | prompt_injection | 200 | unsure | 0.6401 | 0.3333 | 0.5634 | HELD |
+| PI06 | prompt_injection | 200 | unsure | 0.5583 | 0.4290 | 0.5260 | HELD |
+| MF01 | malformed | 400 | — | — | — | — | HELD |
+| MF02 | malformed | 400 | — | — | — | — | HELD |
+| MF03 | malformed | 200 | human | 0.0000 | 0.5000 | 0.1250 | BROKE |
+| MF04 | malformed | 200 | human | 0.0112 | 0.5000 | 0.1334 | BROKE |
+| MF05 | malformed | 200 | ai | 0.9976 | 0.5000 | 0.8732 | BROKE |
+| MF06 | malformed | 200 | ai | 0.9969 | 0.5000 | 0.8727 | BROKE |
+| MF07 | malformed | 200 | ai | 0.9064 | 0.5000 | 0.8048 | HELD |
+| MF08 | malformed | 413 | — | — | — | — | HELD |
+| RQ01 | malformed | 400 | — | — | — | — | HELD |
+| RQ02 | malformed | 400 | — | — | — | — | HELD |
+| RQ03 | malformed | 400 | — | — | — | — | HELD |
+| RQ04 | malformed | 400 | — | — | — | — | HELD |
+| RQ05 | malformed | 400 | — | — | — | — | HELD |
+| RQ06 | malformed | 400 | — | — | — | — | HELD |
+| RQ07 | malformed | 400 | — | — | — | — | HELD |
+| RQ08 | malformed | 400 | — | — | — | — | HELD |
+| RQ09 | malformed | 400 | — | — | — | — | HELD |
+| RQ10 | malformed | 400 | — | — | — | — | HELD |
+| RQ11 | malformed | 400 | — | — | — | — | HELD |
+| RQ12 | malformed | 400 | — | — | — | — | HELD |
+| FL01_01 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_02 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_03 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_04 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_05 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_06 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_07 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_08 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_09 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_10 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_11 | flood_same_creator | 429 | — | — | — | — | HELD |
+| FL01_12 | flood_same_creator | 429 | — | — | — | — | HELD |
+
+### Audit log extract
+
+These ten entries came from the baseline staff run. PI05's input looked like JSON log fields, and the saved line still has the actual scores. The final entry shows a rejected request.
+
+```jsonl
+{"timestamp": "2026-11-09T05:19:55+00:00", "content_id": "b90e7d47-15eb-4547-b79f-69604ccca354", "creator_id": "attacker_EV01", "guess": "human", "model_score": 0.1635, "style_score": 0.5093, "combined_score": 0.25, "label": "This writing looks like it was written by a person. This check cannot prove who wrote it.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:55+00:00", "content_id": "be08decd-520b-4a35-a3cd-a72ac777711a", "creator_id": "attacker_EV06", "guess": "unsure", "model_score": 0.5727, "style_score": 0.0625, "combined_score": 0.46, "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:56+00:00", "content_id": "edefe030-78df-445c-968a-76a3752b6c86", "creator_id": "attacker_EV10", "guess": "ai", "model_score": 0.9792, "style_score": 0.5124, "combined_score": 0.8625, "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:57+00:00", "content_id": "bb75b70e-6b69-40a7-993e-cf21b9a7f113", "creator_id": "attacker_FP03", "guess": "ai", "model_score": 0.8051, "style_score": 0.473, "combined_score": 0.7221, "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:57+00:00", "content_id": "3d6ce94c-54be-480d-bc31-7d3dcc910c64", "creator_id": "attacker_FP04", "guess": "ai", "model_score": 0.8329, "style_score": 0.4583, "combined_score": 0.7392, "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:57+00:00", "content_id": "dda1722a-5533-4532-9e2b-2b546fde571a", "creator_id": "attacker_FP07", "guess": "ai", "model_score": 0.8816, "style_score": 0.5106, "combined_score": 0.7889, "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:58+00:00", "content_id": "b170fc30-e918-420c-9581-618eba5e2f13", "creator_id": "attacker_PI02", "guess": "human", "model_score": 0.2044, "style_score": 0.3578, "combined_score": 0.2427, "label": "This writing looks like it was written by a person. This check cannot prove who wrote it.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:58+00:00", "content_id": "40081c8b-5f39-4979-87bc-978c34a038c6", "creator_id": "attacker_PI05", "guess": "unsure", "model_score": 0.6401, "style_score": 0.3333, "combined_score": 0.5634, "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.", "status": "decided"}
+{"timestamp": "2026-11-09T05:19:58+00:00", "content_id": "ac5cd4e7-a9df-4b32-9a37-f56852adf244", "creator_id": "attacker_MF03", "guess": "human", "model_score": 0.0, "style_score": 0.5, "combined_score": 0.125, "label": "This writing looks like it was written by a person. This check cannot prove who wrote it.", "status": "decided"}
+{"timestamp": "2026-11-09T05:20:01+00:00", "creator_id": "attacker_flood", "event": "rejected", "status": "rejected", "reason": "rate_limited", "http_status": 429, "limit": "10 per 1 minute"}
+```
+
+### Worst outcome
+
+FP03 stood out to me. The writer was describing their first month in a new country and learning the words people use at work. The detector gave the text a 0.8051 model score and a 0.4730 style score. The blend came out at 0.7221 and called the writing AI. I feel like that's exactly the kind of accusation that would be hard to explain to someone who was just trying to write clearly.
+
 ## How I Used AI
 
 I worked with ChatGPT to help me really think of the ways I could go about the acceptance criteria and getting the endpoint to run with one signal
