@@ -59,12 +59,12 @@ The rule lives in **`scoring.py::combine_signals`**. The plan was recorded befor
 ```text
 combined = 0.75 * model_score + 0.25 * style_score
 if abs(model_score - style_score) > 0.50:
-    keep combined between 0.46 and 0.69
+    keep combined between 0.46 and 0.79
 ```
 
 The model counts more because the style signal is simpler and easier to change. If the two signals strongly disagree, I keep the result inside the unsure range. Weights and thresholds are in `config.py`.
 
-For example, model score 0.95 and style score 0.20 first produce 0.7625. Because the signals differ by more than 0.50, the revised rule limits that result to 0.69, which is unsure. Model score 0.10 and style score 0.90 first produce 0.30 and are limited to 0.46, also unsure. These are arithmetic examples; actual text results appear below.
+For example, model score 0.95 and style score 0.20 first produce 0.7625. Because the signals differ by more than 0.50, the disagreement rule keeps that result inside the unsure band. Model score 0.10 and style score 0.90 first produce 0.30 and are limited to 0.46, also unsure. These are arithmetic examples; actual text results appear below.
 
 The API field `confidence` is the combined **AI-likelihood score**, following the starter's direction: 0 means more human-like and 1 means more AI-like. A human label therefore has a low value in this field. It is not a calibrated probability or the probability that the selected label is correct.
 
@@ -72,7 +72,7 @@ The API field `confidence` is the combined **AI-likelihood score**, following th
 
 `python verify.py` passed all 16 backend checks. They cover input validation, all three labels through the route with controlled signals, 1,001 score points and threshold boundaries, signal disagreement, audit entries, missing models, and ten valid appeals. The tests use a temporary audit log and a mocked detector. They do not measure detection accuracy.
 
-### Actual four-text calibration and threshold revision
+### Unit 7 four-text calibration and threshold revision
 
 I first ran the four texts with human scores at or below 0.25 and AI scores at or above 0.80. All four received unsure. The original results are preserved in `results/calibration_before_thresholds.json` and `.md`; the original decisions also remain in the audit log.
 
@@ -97,11 +97,13 @@ The largest signal difference in the rerun was on Unedited AI: model 0.7920, sty
 
 ## Label Variants
 
+These ranges reflect the final Unit 8 cutoff. The Unit 7 calibration and sample run above and below use the earlier cutoff.
+
 | Label | Score range | Exact text |
 |---|---|---|
 | High-confidence human | 0 <= score <= 0.45 | This writing looks like it was written by a person. This check cannot prove who wrote it. |
-| Unsure | 0.45 < score < 0.70 | We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree. |
-| High-confidence AI | 0.70 <= score <= 1 | This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review. |
+| Unsure | 0.45 < score < 0.80 | We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree. |
+| High-confidence AI | 0.80 <= score <= 1 | This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review. |
 
 I kept the unsure wording because I do not want uncertainty to sound like an accusation. The high-confidence names refer to the configured score bands. The scores are not calibrated probabilities, and none of these labels proves authorship.
 
@@ -178,13 +180,13 @@ curl "http://127.0.0.1:5000/log?limit=2"
 ```
 <!-- SAMPLE_RUN_END -->
 
-To replace this clearly marked demo with real model evidence, run `python sample_run.py` after installing dependencies and downloading GPT-2. The committed demo audit rows are explicitly tagged `controlled_test_double` so they cannot be confused with real-model results.
+This sample run is preserved from Unit 7. The separate demo files and corresponding audit rows are tagged `controlled_test_double`.
 
 ## Rate Limiting
 
 I set `/submit` to 10 requests per minute and 80 per day for the same creator ID. Ten gives someone room to try several edits in a row. The daily cap keeps a script from slowly making hundreds of requests with the same ID. If there is no usable creator ID, the request counts against the caller's address. The ID is self-reported, so a script can rotate IDs, and restarting the service resets the counters.
 
-`python run_attacks.py --flood 15` produced this [flood run](/workspace/scratch/21c0a126617f/repo/results/flood_2026-11-08_2119.md):
+`python run_attacks.py --flood 15` produced this [flood run](results/flood_2026-11-08_2119.md):
 
 ```text
 200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
@@ -194,7 +196,7 @@ The last five requests got 429 and left rejection records. `GET /log` also retur
 
 ## Attack Run — Before
 
-I ran all 56 staff cases through the local GPT-2 service. **36 held and 20 broke.** The [full before run](/workspace/scratch/21c0a126617f/repo/results/attack_run_2026-11-08_2120_before.md) includes the exact response labels and content IDs.
+I ran all 56 staff cases through the local GPT-2 service. **36 held and 20 broke.** The [full before run](results/attack_run_2026-11-08_2120_before.md) includes the exact response labels and content IDs.
 
 For evasion, I counted human and unsure guesses as a break because the AI-origin text avoided the AI label. For false positives, I counted only an AI guess as a break. For prompt injection, I looked at whether the requested outcome appeared and checked the scores and log before attributing it to instruction-following. I counted junk inputs that got decisions as breaks, and counted Arabic text as held for request handling because valid right-to-left writing should still reach the route. For the shared-ID flood, the first ten requests were within the cap and the last two had to be blocked. The CSV describes 20 requests and contains 12 flood rows, so I tested all 12.
 
@@ -292,7 +294,7 @@ FP03 stood out to me. The writer was describing their first month in a new count
 
 The first two rows are partial runs using the two human pieces and one unedited AI piece already in `calibration_inputs.json`. I still need 18 more pieces of my own writing for criterion 1 and a matched 10-human and 10-AI set for criterion 2. I left the original targets in `criteria.md`. To run the full set, save `eval_writing.json` with a `human` array of 20 pieces and an `ai` array of 10 unedited AI pieces matched to the first ten human pieces in topic and length. Use the same file before and after. Restart the service before each full evaluation to reset the fallback address bucket.
 
-The [complete baseline output](/workspace/scratch/21c0a126617f/repo/results/run_2026-11-08_2120_before.md) records all three trials. Below is actual JSON from trial 1, captured by `run_eval.py::Evaluation` through `app.py::submit`, `app.py::appeal`, and `app.py::get_log`. The score grid uses `scoring.py::score_to_label`. The separate `verify.py` checks assert the detector is never called on malformed or oversized requests.
+The [complete baseline output](results/run_2026-11-08_2120_before.md) records all three trials. Below is actual JSON from trial 1, captured by `run_eval.py::Evaluation` through `app.py::submit`, `app.py::appeal`, and `app.py::get_log`. The score grid uses `scoring.py::score_to_label`. The separate `verify.py` checks assert the detector is never called on malformed or oversized requests.
 
 **1. False accusations**
 
@@ -474,6 +476,245 @@ The [complete baseline output](/workspace/scratch/21c0a126617f/repo/results/run_
 | MF06 | Emoji-only text passed the string and token checks. Repetition drove GPT-2 to 0.9969 and the route returned an AI decision. |
 
 The clearest pattern was how much the model score can pull the result in either direction. The second signal stayed neutral or lower on several human pieces that still received AI labels. With the model weighted at 75%, predictable wording was enough to cross 0.70. I wanted to see how much raising that cutoff would help the writers who got flagged.
+
+## The Improvement
+
+I raised the AI cutoff from 0.70 to 0.80. The five baseline accusations landed from 0.7221 to 0.7889, and I wanted those cases to go to unsure. The human cutoff stayed at 0.45. Both signals, their weights, and the disagreement rule stayed the same. The upper end of the disagreement clamp follows the AI cutoff, so it is now 0.79.
+
+| Measure | Before | After |
+|---|---:|---:|
+| Staff attacks held | 36/56 | 41/56 |
+| Staff attacks broke | 20/56 | 15/56 |
+| Human attack samples given the AI label | 5/8 | 0/8 |
+| Evasion samples given the AI label | 1/10 | 1/10 |
+| Calibration labels reached | 3/3 | 2/3 |
+| Valid appeals logged per trial | 10/10 | 10/10 |
+| Invalid requests handled per trial | 7/7 | 7/7 |
+
+The higher cutoff stopped all five false accusations on the staff set. The calibration AI paragraph stayed at 0.7272, so it moved to unsure and the live label-coverage target went from met to missed. I used these attacks to choose the cutoff, so I would need fresh writing to see how well it carries over.
+
+### Attack Run — After
+
+The [full after run](results/attack_run_2026-11-08_2122_after.md) has the exact response labels and content IDs. I used the same verdict rules as the baseline.
+
+| ID | Family | HTTP | Guess | Model | Style | Combined | Verdict |
+|---|---|---:|---|---:|---:|---:|---|
+| EV01 | evasion | 200 | human | 0.1635 | 0.5093 | 0.2500 | BROKE |
+| EV02 | evasion | 200 | unsure | 0.5943 | 0.2121 | 0.4988 | BROKE |
+| EV03 | evasion | 200 | unsure | 0.6662 | 0.4177 | 0.6041 | BROKE |
+| EV04 | evasion | 200 | unsure | 0.6114 | 0.5106 | 0.5862 | BROKE |
+| EV05 | evasion | 200 | human | 0.3212 | 0.3674 | 0.3327 | BROKE |
+| EV06 | evasion | 200 | unsure | 0.5727 | 0.0625 | 0.4600 | BROKE |
+| EV07 | evasion | 200 | unsure | 0.5862 | 0.5000 | 0.5647 | BROKE |
+| EV08 | evasion | 200 | human | 0.2452 | 0.5000 | 0.3089 | BROKE |
+| EV09 | evasion | 200 | unsure | 0.7042 | 0.3976 | 0.6276 | BROKE |
+| EV10 | evasion | 200 | ai | 0.9792 | 0.5124 | 0.8625 | HELD |
+| FP01 | false_positive | 200 | unsure | 0.6175 | 0.4440 | 0.5741 | HELD |
+| FP02 | false_positive | 200 | unsure | 0.7387 | 0.5310 | 0.6868 | HELD |
+| FP03 | false_positive | 200 | unsure | 0.8051 | 0.4730 | 0.7221 | HELD |
+| FP04 | false_positive | 200 | unsure | 0.8329 | 0.4583 | 0.7392 | HELD |
+| FP05 | false_positive | 200 | unsure | 0.8005 | 0.6063 | 0.7520 | HELD |
+| FP06 | false_positive | 200 | unsure | 0.8814 | 0.4241 | 0.7671 | HELD |
+| FP07 | false_positive | 200 | unsure | 0.8816 | 0.5106 | 0.7889 | HELD |
+| FP08 | false_positive | 200 | human | 0.3223 | 0.5000 | 0.3667 | HELD |
+| PI01 | prompt_injection | 200 | human | 0.4625 | 0.2757 | 0.4158 | BROKE |
+| PI02 | prompt_injection | 200 | human | 0.2044 | 0.3578 | 0.2427 | BROKE |
+| PI03 | prompt_injection | 200 | unsure | 0.5943 | 0.4443 | 0.5568 | HELD |
+| PI04 | prompt_injection | 200 | unsure | 0.4998 | 0.4415 | 0.4852 | HELD |
+| PI05 | prompt_injection | 200 | unsure | 0.6401 | 0.3333 | 0.5634 | HELD |
+| PI06 | prompt_injection | 200 | unsure | 0.5583 | 0.4290 | 0.5260 | HELD |
+| MF01 | malformed | 400 | — | — | — | — | HELD |
+| MF02 | malformed | 400 | — | — | — | — | HELD |
+| MF03 | malformed | 200 | human | 0.0000 | 0.5000 | 0.1250 | BROKE |
+| MF04 | malformed | 200 | human | 0.0112 | 0.5000 | 0.1334 | BROKE |
+| MF05 | malformed | 200 | ai | 0.9976 | 0.5000 | 0.8732 | BROKE |
+| MF06 | malformed | 200 | ai | 0.9969 | 0.5000 | 0.8727 | BROKE |
+| MF07 | malformed | 200 | ai | 0.9064 | 0.5000 | 0.8048 | HELD |
+| MF08 | malformed | 413 | — | — | — | — | HELD |
+| RQ01 | malformed | 400 | — | — | — | — | HELD |
+| RQ02 | malformed | 400 | — | — | — | — | HELD |
+| RQ03 | malformed | 400 | — | — | — | — | HELD |
+| RQ04 | malformed | 400 | — | — | — | — | HELD |
+| RQ05 | malformed | 400 | — | — | — | — | HELD |
+| RQ06 | malformed | 400 | — | — | — | — | HELD |
+| RQ07 | malformed | 400 | — | — | — | — | HELD |
+| RQ08 | malformed | 400 | — | — | — | — | HELD |
+| RQ09 | malformed | 400 | — | — | — | — | HELD |
+| RQ10 | malformed | 400 | — | — | — | — | HELD |
+| RQ11 | malformed | 400 | — | — | — | — | HELD |
+| RQ12 | malformed | 400 | — | — | — | — | HELD |
+| FL01_01 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_02 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_03 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_04 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_05 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_06 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_07 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_08 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_09 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_10 | flood_same_creator | 200 | human | 0.0287 | 0.5000 | 0.1465 | HELD |
+| FL01_11 | flood_same_creator | 429 | — | — | — | — | HELD |
+| FL01_12 | flood_same_creator | 429 | — | — | — | — | HELD |
+
+### Criterion trials after the change
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. False accusations | At most 1 of 20 | 0/2 scored | 0/2 scored | 0/2 scored | INCOMPLETE |
+| 2. AI-human mean gap | At least +0.20 on matched sets of 10 | +0.1901 | +0.1901 | +0.1901 | INCOMPLETE |
+| 3. Label coverage | 3 of 3 live labels and a complete, exclusive score grid | 2/3 labels, 1001/1001 grid | 2/3 labels, 1001/1001 grid | 2/3 labels, 1001/1001 grid | MISSED |
+| 4. Appeal logging | 10 of 10 valid appeals and one unknown-ID 404 | 10/10, unknown 404 | 10/10, unknown 404 | 10/10, unknown 404 | MET |
+| 5. Invalid submissions | All expected JSON errors, no detector calls or decisions | 7/7, 0 decisions | 7/7, 0 decisions | 7/7, 0 decisions | MET |
+
+The [full after output](results/run_2026-11-08_2122_after.md) contains each trial. The JSON below is from trial 1 of `run_eval.py::Evaluation`, using the same requests and fixed inputs as before.
+
+**1. False accusations**
+
+```json
+{
+  "http_status": 200,
+  "json": {
+    "confidence": 0.6427,
+    "content_id": "cf60c54c-b1ab-4ff7-93e5-3d94449e8623",
+    "guess": "unsure",
+    "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+    "model_score": 0.6943,
+    "status": "decided",
+    "style_score": 0.4879
+  }
+}
+```
+
+**2. AI-human mean gap**
+
+```json
+{
+  "means": {
+    "human": 0.53705,
+    "ai": 0.7272
+  },
+  "gap": 0.19014999999999993,
+  "ai_example": {
+    "http_status": 200,
+    "json": {
+      "confidence": 0.7272,
+      "content_id": "dac2bb8d-39eb-4824-bed1-d93ba61835b9",
+      "guess": "unsure",
+      "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+      "model_score": 0.792,
+      "status": "decided",
+      "style_score": 0.5328
+    }
+  }
+}
+```
+
+**3. Label coverage**
+
+```json
+{
+  "responses": [
+    {
+      "http_status": 200,
+      "json": {
+        "confidence": 0.7272,
+        "content_id": "c71d2d2c-1f77-454e-a8ba-d0fa483895ed",
+        "guess": "unsure",
+        "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+        "model_score": 0.792,
+        "status": "decided",
+        "style_score": 0.5328
+      }
+    }
+  ],
+  "grid_points": 1001,
+  "grid_matched": 1001,
+  "boundaries": {
+    "0.45": [
+      "human",
+      "This writing looks like it was written by a person. This check cannot prove who wrote it."
+    ],
+    "0.8": [
+      "ai",
+      "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review."
+    ]
+  }
+}
+```
+
+**4. Appeal logging**
+
+```json
+{
+  "cases": [
+    {
+      "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
+      "reasoning": "  I wrote this and can show my earlier draft 1.  ",
+      "response": {
+        "http_status": 200,
+        "json": {
+          "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
+          "message": "Your appeal has been recorded and the submission is under review.",
+          "status": "under_review"
+        }
+      },
+      "audit": [
+        {
+          "combined_score": 0.7272,
+          "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
+          "creator_id": "eval_c75e72a50a_1_appeals_1",
+          "guess": "unsure",
+          "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+          "model_score": 0.792,
+          "status": "decided",
+          "style_score": 0.5328,
+          "timestamp": "2026-11-09T05:22:26+00:00"
+        },
+        {
+          "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
+          "creator_id": "eval_c75e72a50a_1_appeals_1",
+          "event": "appeal",
+          "reasoning": "  I wrote this and can show my earlier draft 1.  ",
+          "status": "under_review",
+          "timestamp": "2026-11-09T05:22:28+00:00"
+        }
+      ]
+    }
+  ],
+  "unknown": {
+    "http_status": 404,
+    "json": {
+      "error": "not_found",
+      "message": "No submission has that content_id."
+    }
+  }
+}
+```
+
+**5. Invalid submissions**
+
+```json
+[
+  {
+    "case": "malformed JSON",
+    "expected": 400,
+    "http_status": 400,
+    "json": {
+      "error": "invalid_input",
+      "message": "Send a JSON object."
+    }
+  },
+  {
+    "case": "oversized text",
+    "expected": 413,
+    "http_status": 413,
+    "json": {
+      "error": "text_too_large",
+      "message": "text must be at most 10000 characters."
+    }
+  }
+]
+```
 
 ## How I Used AI
 
