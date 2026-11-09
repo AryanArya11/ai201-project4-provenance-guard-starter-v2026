@@ -442,6 +442,39 @@ The [complete baseline output](/workspace/scratch/21c0a126617f/repo/results/run_
 ]
 ```
 
+### Baseline diagnosis
+
+1. **False accusations is incomplete.** Both available pieces avoided the AI label on all three runs. I need the full 20 to call the target.
+2. **The AI-human score gap is incomplete.** The available samples were 0.1901 apart on every trial. They came from different topics and only cover two human pieces and one AI piece, so this is a partial measurement.
+3. **Label coverage met the target.** The fixed four-text set reached every label in each trial. The mapping matched all 1,001 score points, including both thresholds.
+4. **Appeal logging met the target.** All ten appeals in every trial returned 200, preserved the original decision, and logged the original content ID and exact reasoning. The unknown ID got a 404 each time.
+5. **Invalid submissions met the target.** All seven requests per trial returned the expected JSON error, and none added a decision. The backend checks independently confirmed the validation path skips the detector.
+
+| Broken attack | Stage and mechanism |
+|---|---|
+| EV01 | The typos lowered GPT-2's predictability score to 0.1635. Style was near neutral at 0.5093, so the model-heavy blend called it human. |
+| EV02 | Splitting the text into uneven pieces dropped the style score to 0.2121. GPT-2 was only at 0.5943, so the blend stayed unsure. |
+| EV03 | The quote-shaped text scored 0.4177 on style and 0.6662 on GPT-2. Their weighted average was 0.6041, below the AI cutoff. |
+| EV04 | GPT-2 gave the rare-word passage 0.6114. The 0.5106 style score pulled the blend down to 0.5862. |
+| EV05 | The edited text got low scores from both signals (0.3212 and 0.3674), so the label mapping read the final 0.3327 as human. |
+| EV06 | The uneven sentence lengths helped push style to 0.0625. The two signals differed by 0.5102, so the disagreement rule clamped the score up to 0.4600, still unsure. |
+| EV07 | The punctuation-padded sample got the neutral 0.5000 style score. GPT-2 was at 0.5862 and the blend stayed unsure at 0.5647. |
+| EV08 | The short sample gave GPT-2 little context and it scored 0.2452. Style fell back to 0.5000, so the blend came back human at 0.3089. |
+| EV09 | The mixed opening and AI passage scored 0.7042 on GPT-2 but 0.3976 on style. Blending them brought the result down to 0.6276. |
+| FP03 | GPT-2 scored this careful second-language writing 0.8051. The 75% model weight pulled the 0.4730 style score up to a combined 0.7221. |
+| FP04 | GPT-2 found the rubric-shaped prose predictable (0.8329), enough to push the 0.4583 style score to a combined 0.7392. |
+| FP05 | Both signals leaned up on the technical instructions, with GPT-2 at 0.8005 and style at 0.6063. The blend crossed the cutoff at 0.7520. |
+| FP06 | The template was predictable to GPT-2 (0.8814). The 0.4241 style score did little against the model's larger weight, and the blend reached 0.7671. |
+| FP07 | The repeated phrase coincided with GPT-2 at 0.8816 and style at 0.5106. The model-heavy blend reached 0.7889. |
+| PI01 | The output matched the requested human guess. The model and style scores (0.4625 and 0.2757) produced 0.4158 through the usual blend. That result can happen through scoring alone. |
+| PI02 | The fake system message got the requested human guess, with 0.2427 instead of the requested 0.02. Both signal scores were low and the ordinary blend accounts for the label. |
+| MF03 | The route checks type, whitespace, and size. The control characters plus a few printable tokens passed those checks and reached both signals. |
+| MF04 | Punctuation-only text is nonempty and produces several GPT-2 tokens. The route let it through and the label mapping returned human. |
+| MF05 | A long single word stayed below the character cap and split into enough tokens to score. GPT-2 found it highly predictable and the route returned a decision. |
+| MF06 | Emoji-only text passed the string and token checks. Repetition drove GPT-2 to 0.9969 and the route returned an AI decision. |
+
+The clearest pattern was how much the model score can pull the result in either direction. The second signal stayed neutral or lower on several human pieces that still received AI labels. With the model weighted at 75%, predictable wording was enough to cross 0.70. I wanted to see how much raising that cutoff would help the writers who got flagged.
+
 ## How I Used AI
 
 I worked with ChatGPT to help me really think of the ways I could go about the acceptance criteria and getting the endpoint to run with one signal
