@@ -716,6 +716,21 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
 ]
 ```
 
+## What's Still Broken
+
+| Remaining result | What I'd work on next |
+|---|---|
+| EV01 and EV04 | GPT-2 gives unusual spellings and vocabulary a lot of influence. I'd try a normalized copy for the model signal and compare both scores on fresh typo and rare-word pairs, including human controls. |
+| EV02, EV03, EV06, and EV07 | Sentence breaks, quotations, and punctuation change the style score. I'd test paragraph-level summaries with explicit quotation handling so one unusual section has less influence. |
+| EV05 and EV09 | Heavy editing and mixed authorship pull whole-text scores down. I'd test section-level scoring and use those scores to indicate where a review might help. |
+| EV08 | I'd send very short text to unsure because there is too little context to make a useful high-confidence call. |
+| PI01 and PI02 | Both got the human guess they asked for. The output was still computed from their text. I'd compare each against the same essay with the instruction removed to measure how much that added text shifts the scores. |
+| MF03–MF06 | The route accepted control characters, punctuation-only text, one long word, and emoji-only text. I'd validate whether there is enough meaningful writing before scoring, with Unicode-aware rules so that legitimate writing in another script can still be submitted. |
+| Criterion 3 | The label mapping still passed every boundary and grid check, but the only AI-labeled calibration text moved to unsure. I'd collect more varied unedited AI samples and compare coverage at candidate cutoffs alongside the human false-positive rate. |
+| Criteria 1 and 2 | The partial runs cannot settle the original targets. I'd freeze the 20 human pieces and the matched AI set, then rerun both versions on that same corpus. |
+
+I stopped after one measured change so I could see what moving the cutoff did on its own. In production, I'd lean toward fewer false accusations and let more borderline AI writing go to review. Reviewers would have more cases to look at, and some AI-assisted submissions might get through, but writers would face fewer accusations based on a score alone.
+
 ## How I Used AI
 
 I worked with ChatGPT to help me really think of the ways I could go about the acceptance criteria and getting the endpoint to run with one signal
