@@ -286,15 +286,15 @@ FP03 stood out to me. The writer was describing their first month in a new count
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. False accusations | At most 1 of 20 | 0/2 scored | 0/2 scored | 0/2 scored | INCOMPLETE |
-| 2. AI-human mean gap | At least +0.20 on matched sets of 10 | +0.1901 | +0.1901 | +0.1901 | INCOMPLETE |
+| 1. False accusations | At most 1 of 20 | 0/20 flagged | 0/20 flagged | 0/20 flagged | MET |
+| 2. AI-human mean gap | At least +0.20 on matched sets of 10 | -0.0188 | -0.0188 | -0.0188 | MISSED |
 | 3. Label coverage | 3 of 3 live labels and a complete, exclusive score grid | 3/3 labels, 1001/1001 grid | 3/3 labels, 1001/1001 grid | 3/3 labels, 1001/1001 grid | MET |
 | 4. Appeal logging | 10 of 10 valid appeals and one unknown-ID 404 | 10/10, unknown 404 | 10/10, unknown 404 | 10/10, unknown 404 | MET |
 | 5. Invalid submissions | All expected JSON errors, no detector calls or decisions | 7/7, 0 decisions | 7/7, 0 decisions | 7/7, 0 decisions | MET |
 
-The first two rows are partial runs using the two human pieces and one unedited AI piece already in `calibration_inputs.json`. I still need 18 more pieces of my own writing for criterion 1 and a matched 10-human and 10-AI set for criterion 2. I left the original targets in `criteria.md`. To run the full set, save `eval_writing.json` with a `human` array of 20 pieces and an `ai` array of 10 unedited AI pieces matched to the first ten human pieces in topic and length. Use the same file before and after. Restart the service before each full evaluation to reset the fallback address bucket.
+I used 20 pieces of my own writing, including the two Unit 7 human calibration paragraphs and 18 excerpts from my course writing. For the score gap, ChatGPT generated one passage for each of the first ten human pieces, using the same topic and a similar length. I kept those generated passages as written and froze all 30 texts in [eval_writing.json](eval_writing.json) before running either version. The human pieces all come from one writer, and several share a source assignment.
 
-The [complete baseline output](results/run_2026-11-08_2120_before.md) records all three trials. Below is actual JSON from trial 1, captured by `run_eval.py::Evaluation` through `app.py::submit`, `app.py::appeal`, and `app.py::get_log`. The score grid uses `scoring.py::score_to_label`. The separate `verify.py` checks assert the detector is never called on malformed or oversized requests.
+The [full baseline run](results/run_2026-11-08_2131_before.md) records all three trials. The [earlier pilot](results/run_2026-11-08_2120_before.md) used only the calibration examples for the first two criteria. Below is JSON from trial 1 of the full run, captured by `run_eval.py::Evaluation` through the submission, appeal, and log routes. The score grid uses `scoring.py::score_to_label`. The separate `verify.py` checks confirm that invalid requests skip the detector.
 
 **1. False accusations**
 
@@ -303,7 +303,7 @@ The [complete baseline output](results/run_2026-11-08_2120_before.md) records al
   "http_status": 200,
   "json": {
     "confidence": 0.6427,
-    "content_id": "7bebb981-475d-4048-b8df-97ee89707c6b",
+    "content_id": "7a3e7b5d-4615-4c4d-bf24-a8ceb7e6094f",
     "guess": "unsure",
     "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
     "model_score": 0.6943,
@@ -318,20 +318,20 @@ The [complete baseline output](results/run_2026-11-08_2120_before.md) records al
 ```json
 {
   "means": {
-    "human": 0.53705,
-    "ai": 0.7272
+    "human": 0.44547,
+    "ai": 0.42665
   },
-  "gap": 0.19014999999999993,
+  "gap": -0.018820000000000003,
   "ai_example": {
     "http_status": 200,
     "json": {
-      "confidence": 0.7272,
-      "content_id": "81886363-b7a6-40e6-9d47-55a030a11096",
-      "guess": "ai",
-      "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.",
-      "model_score": 0.792,
+      "confidence": 0.6694,
+      "content_id": "76b80641-b4f3-4dcb-8ddc-230c94574a9a",
+      "guess": "unsure",
+      "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+      "model_score": 0.7169,
       "status": "decided",
-      "style_score": 0.5328
+      "style_score": 0.5268
     }
   }
 }
@@ -346,7 +346,7 @@ The [complete baseline output](results/run_2026-11-08_2120_before.md) records al
       "http_status": 200,
       "json": {
         "confidence": 0.7272,
-        "content_id": "d59d08c6-d5c1-4d33-ba37-01d7ff39b666",
+        "content_id": "0c2911dc-4620-4b54-b15c-5c18be86a3ae",
         "guess": "ai",
         "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.",
         "model_score": 0.792,
@@ -376,12 +376,12 @@ The [complete baseline output](results/run_2026-11-08_2120_before.md) records al
 {
   "cases": [
     {
-      "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
+      "content_id": "d2c45e1f-340d-4830-95c8-5c8319aec50a",
       "reasoning": "  I wrote this and can show my earlier draft 1.  ",
       "response": {
         "http_status": 200,
         "json": {
-          "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
+          "content_id": "d2c45e1f-340d-4830-95c8-5c8319aec50a",
           "message": "Your appeal has been recorded and the submission is under review.",
           "status": "under_review"
         }
@@ -389,22 +389,22 @@ The [complete baseline output](results/run_2026-11-08_2120_before.md) records al
       "audit": [
         {
           "combined_score": 0.7272,
-          "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
-          "creator_id": "eval_5ea923427c_1_appeals_1",
+          "content_id": "d2c45e1f-340d-4830-95c8-5c8319aec50a",
+          "creator_id": "eval_4878268925_1_appeals_1",
           "guess": "ai",
           "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.",
           "model_score": 0.792,
           "status": "decided",
           "style_score": 0.5328,
-          "timestamp": "2026-11-09T05:20:32+00:00"
+          "timestamp": "2026-11-09T05:30:46+00:00"
         },
         {
-          "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
-          "creator_id": "eval_5ea923427c_1_appeals_1",
+          "content_id": "d2c45e1f-340d-4830-95c8-5c8319aec50a",
+          "creator_id": "eval_4878268925_1_appeals_1",
           "event": "appeal",
           "reasoning": "  I wrote this and can show my earlier draft 1.  ",
           "status": "under_review",
-          "timestamp": "2026-11-09T05:20:34+00:00"
+          "timestamp": "2026-11-09T05:30:48+00:00"
         }
       ]
     }
@@ -446,8 +446,8 @@ The [complete baseline output](results/run_2026-11-08_2120_before.md) records al
 
 ### Baseline diagnosis
 
-1. **False accusations is incomplete.** Both available pieces avoided the AI label on all three runs. I need the full 20 to call the target.
-2. **The AI-human score gap is incomplete.** The available samples were 0.1901 apart on every trial. They came from different topics and only cover two human pieces and one AI piece, so this is a partial measurement.
+1. **False accusations met the target.** The baseline flagged 0 of 20 in each trial.
+2. **The AI-human score gap missed the target.** The AI mean was 0.4266 and my writing averaged 0.4455. The difference was -0.0188 in every trial. The model signal's mean gap was -0.0180 and the style signal's was -0.0214. The two signals did not separate these matched groups enough for the blend to reach +0.20.
 3. **Label coverage met the target.** The fixed four-text set reached every label in each trial. The mapping matched all 1,001 score points, including both thresholds.
 4. **Appeal logging met the target.** All ten appeals in every trial returned 200, preserved the original decision, and logged the original content ID and exact reasoning. The unknown ID got a 404 each time.
 5. **Invalid submissions met the target.** All seven requests per trial returned the expected JSON error, and none added a decision. The backend checks independently confirmed the validation path skips the detector.
@@ -487,6 +487,8 @@ I raised the AI cutoff from 0.70 to 0.80. The five baseline accusations landed f
 | Staff attacks broke | 20/56 | 15/56 |
 | Human attack samples given the AI label | 5/8 | 0/8 |
 | Evasion samples given the AI label | 1/10 | 1/10 |
+| My writing given the AI label | 0/20 | 0/20 |
+| Matched AI-human score gap | -0.0188 | -0.0188 |
 | Calibration labels reached | 3/3 | 2/3 |
 | Valid appeals logged per trial | 10/10 | 10/10 |
 | Invalid requests handled per trial | 7/7 | 7/7 |
@@ -560,13 +562,13 @@ The [full after run](results/attack_run_2026-11-08_2122_after.md) has the exact 
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. False accusations | At most 1 of 20 | 0/2 scored | 0/2 scored | 0/2 scored | INCOMPLETE |
-| 2. AI-human mean gap | At least +0.20 on matched sets of 10 | +0.1901 | +0.1901 | +0.1901 | INCOMPLETE |
+| 1. False accusations | At most 1 of 20 | 0/20 flagged | 0/20 flagged | 0/20 flagged | MET |
+| 2. AI-human mean gap | At least +0.20 on matched sets of 10 | -0.0188 | -0.0188 | -0.0188 | MISSED |
 | 3. Label coverage | 3 of 3 live labels and a complete, exclusive score grid | 2/3 labels, 1001/1001 grid | 2/3 labels, 1001/1001 grid | 2/3 labels, 1001/1001 grid | MISSED |
 | 4. Appeal logging | 10 of 10 valid appeals and one unknown-ID 404 | 10/10, unknown 404 | 10/10, unknown 404 | 10/10, unknown 404 | MET |
 | 5. Invalid submissions | All expected JSON errors, no detector calls or decisions | 7/7, 0 decisions | 7/7, 0 decisions | 7/7, 0 decisions | MET |
 
-The [full after output](results/run_2026-11-08_2122_after.md) contains each trial. The JSON below is from trial 1 of `run_eval.py::Evaluation`, using the same requests and fixed inputs as before.
+The [full after run](results/run_2026-11-08_2131_after.md) used the same fixed texts and cases. The [earlier after pilot](results/run_2026-11-08_2122_after.md) is preserved. Below is JSON from trial 1 of the full run.
 
 **1. False accusations**
 
@@ -575,7 +577,7 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
   "http_status": 200,
   "json": {
     "confidence": 0.6427,
-    "content_id": "cf60c54c-b1ab-4ff7-93e5-3d94449e8623",
+    "content_id": "356661bf-b71a-41ee-b40a-63817acd85c9",
     "guess": "unsure",
     "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
     "model_score": 0.6943,
@@ -590,20 +592,20 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
 ```json
 {
   "means": {
-    "human": 0.53705,
-    "ai": 0.7272
+    "human": 0.44547,
+    "ai": 0.42665
   },
-  "gap": 0.19014999999999993,
+  "gap": -0.018820000000000003,
   "ai_example": {
     "http_status": 200,
     "json": {
-      "confidence": 0.7272,
-      "content_id": "dac2bb8d-39eb-4824-bed1-d93ba61835b9",
+      "confidence": 0.6694,
+      "content_id": "7ea1d5a7-0354-4b01-ac3c-f206403dd8c1",
       "guess": "unsure",
       "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
-      "model_score": 0.792,
+      "model_score": 0.7169,
       "status": "decided",
-      "style_score": 0.5328
+      "style_score": 0.5268
     }
   }
 }
@@ -618,7 +620,7 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
       "http_status": 200,
       "json": {
         "confidence": 0.7272,
-        "content_id": "c71d2d2c-1f77-454e-a8ba-d0fa483895ed",
+        "content_id": "3ea08614-fb52-495b-9580-f8250774b640",
         "guess": "unsure",
         "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
         "model_score": 0.792,
@@ -648,12 +650,12 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
 {
   "cases": [
     {
-      "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
+      "content_id": "cb0f1267-fdcf-484a-b58e-9bc05d35f4b1",
       "reasoning": "  I wrote this and can show my earlier draft 1.  ",
       "response": {
         "http_status": 200,
         "json": {
-          "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
+          "content_id": "cb0f1267-fdcf-484a-b58e-9bc05d35f4b1",
           "message": "Your appeal has been recorded and the submission is under review.",
           "status": "under_review"
         }
@@ -661,22 +663,22 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
       "audit": [
         {
           "combined_score": 0.7272,
-          "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
-          "creator_id": "eval_c75e72a50a_1_appeals_1",
+          "content_id": "cb0f1267-fdcf-484a-b58e-9bc05d35f4b1",
+          "creator_id": "eval_6cc746661c_1_appeals_1",
           "guess": "unsure",
           "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
           "model_score": 0.792,
           "status": "decided",
           "style_score": 0.5328,
-          "timestamp": "2026-11-09T05:22:26+00:00"
+          "timestamp": "2026-11-09T05:30:46+00:00"
         },
         {
-          "content_id": "0960c83e-03c5-4a14-82fd-d64f89dc92c7",
-          "creator_id": "eval_c75e72a50a_1_appeals_1",
+          "content_id": "cb0f1267-fdcf-484a-b58e-9bc05d35f4b1",
+          "creator_id": "eval_6cc746661c_1_appeals_1",
           "event": "appeal",
           "reasoning": "  I wrote this and can show my earlier draft 1.  ",
           "status": "under_review",
-          "timestamp": "2026-11-09T05:22:28+00:00"
+          "timestamp": "2026-11-09T05:30:48+00:00"
         }
       ]
     }
@@ -727,7 +729,7 @@ The [full after output](results/run_2026-11-08_2122_after.md) contains each tria
 | PI01 and PI02 | Both got the human guess they asked for. The output was still computed from their text. I'd compare each against the same essay with the instruction removed to measure how much that added text shifts the scores. |
 | MF03–MF06 | The route accepted control characters, punctuation-only text, one long word, and emoji-only text. I'd validate whether there is enough meaningful writing before scoring, with Unicode-aware rules so that legitimate writing in another script can still be submitted. |
 | Criterion 3 | The label mapping still passed every boundary and grid check, but the only AI-labeled calibration text moved to unsure. I'd collect more varied unedited AI samples and compare coverage at candidate cutoffs alongside the human false-positive rate. |
-| Criteria 1 and 2 | The partial runs cannot settle the original targets. I'd freeze the 20 human pieces and the matched AI set, then rerun both versions on that same corpus. |
+| Criterion 2 | Raising the label cutoff had little effect on the score gap. I'd test both signals on writing from more authors and more AI generators, then check which signal adds useful separation before changing the weights. |
 
 I stopped after one measured change so I could see what moving the cutoff did on its own. In production, I'd lean toward fewer false accusations and let more borderline AI writing go to review. Reviewers would have more cases to look at, and some AI-assisted submissions might get through, but writers would face fewer accusations based on a score alone.
 
