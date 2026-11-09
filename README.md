@@ -736,3 +736,5 @@ I stopped after one measured change so I could see what moving the cutoff did on
 ## How I Used AI
 
 I worked with ChatGPT to help me really think of the ways I could go about the acceptance criteria and getting the endpoint to run with one signal
+
+I used ChatGPT to help me set up rate limiting and audit logging, run the attack tests, and compare the results before and after the cutoff change. I also used it to check whether the samples I picked from my own writing met the assignment criteria.
