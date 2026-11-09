@@ -278,6 +278,170 @@ These ten entries came from the baseline staff run. PI05's input looked like JSO
 
 FP03 stood out to me. The writer was describing their first month in a new country and learning the words people use at work. The detector gave the text a 0.8051 model score and a 0.4730 style score. The blend came out at 0.7221 and called the writing AI. I feel like that's exactly the kind of accusation that would be hard to explain to someone who was just trying to write clearly.
 
+## Run Log and Verdicts
+
+### Before the change
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. False accusations | At most 1 of 20 | 0/2 scored | 0/2 scored | 0/2 scored | INCOMPLETE |
+| 2. AI-human mean gap | At least +0.20 on matched sets of 10 | +0.1901 | +0.1901 | +0.1901 | INCOMPLETE |
+| 3. Label coverage | 3 of 3 live labels and a complete, exclusive score grid | 3/3 labels, 1001/1001 grid | 3/3 labels, 1001/1001 grid | 3/3 labels, 1001/1001 grid | MET |
+| 4. Appeal logging | 10 of 10 valid appeals and one unknown-ID 404 | 10/10, unknown 404 | 10/10, unknown 404 | 10/10, unknown 404 | MET |
+| 5. Invalid submissions | All expected JSON errors, no detector calls or decisions | 7/7, 0 decisions | 7/7, 0 decisions | 7/7, 0 decisions | MET |
+
+The first two rows are partial runs using the two human pieces and one unedited AI piece already in `calibration_inputs.json`. I still need 18 more pieces of my own writing for criterion 1 and a matched 10-human and 10-AI set for criterion 2. I left the original targets in `criteria.md`. To run the full set, save `eval_writing.json` with a `human` array of 20 pieces and an `ai` array of 10 unedited AI pieces matched to the first ten human pieces in topic and length. Use the same file before and after. Restart the service before each full evaluation to reset the fallback address bucket.
+
+The [complete baseline output](/workspace/scratch/21c0a126617f/repo/results/run_2026-11-08_2120_before.md) records all three trials. Below is actual JSON from trial 1, captured by `run_eval.py::Evaluation` through `app.py::submit`, `app.py::appeal`, and `app.py::get_log`. The score grid uses `scoring.py::score_to_label`. The separate `verify.py` checks assert the detector is never called on malformed or oversized requests.
+
+**1. False accusations**
+
+```json
+{
+  "http_status": 200,
+  "json": {
+    "confidence": 0.6427,
+    "content_id": "7bebb981-475d-4048-b8df-97ee89707c6b",
+    "guess": "unsure",
+    "label": "We are unsure whether AI was involved in this writing. This is not an accusation. You can ask for a review if you disagree.",
+    "model_score": 0.6943,
+    "status": "decided",
+    "style_score": 0.4879
+  }
+}
+```
+
+**2. AI-human mean gap**
+
+```json
+{
+  "means": {
+    "human": 0.53705,
+    "ai": 0.7272
+  },
+  "gap": 0.19014999999999993,
+  "ai_example": {
+    "http_status": 200,
+    "json": {
+      "confidence": 0.7272,
+      "content_id": "81886363-b7a6-40e6-9d47-55a030a11096",
+      "guess": "ai",
+      "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.",
+      "model_score": 0.792,
+      "status": "decided",
+      "style_score": 0.5328
+    }
+  }
+}
+```
+
+**3. Label coverage**
+
+```json
+{
+  "responses": [
+    {
+      "http_status": 200,
+      "json": {
+        "confidence": 0.7272,
+        "content_id": "d59d08c6-d5c1-4d33-ba37-01d7ff39b666",
+        "guess": "ai",
+        "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.",
+        "model_score": 0.792,
+        "status": "decided",
+        "style_score": 0.5328
+      }
+    }
+  ],
+  "grid_points": 1001,
+  "grid_matched": 1001,
+  "boundaries": {
+    "0.45": [
+      "human",
+      "This writing looks like it was written by a person. This check cannot prove who wrote it."
+    ],
+    "0.7": [
+      "ai",
+      "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review."
+    ]
+  }
+}
+```
+
+**4. Appeal logging**
+
+```json
+{
+  "cases": [
+    {
+      "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
+      "reasoning": "  I wrote this and can show my earlier draft 1.  ",
+      "response": {
+        "http_status": 200,
+        "json": {
+          "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
+          "message": "Your appeal has been recorded and the submission is under review.",
+          "status": "under_review"
+        }
+      },
+      "audit": [
+        {
+          "combined_score": 0.7272,
+          "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
+          "creator_id": "eval_5ea923427c_1_appeals_1",
+          "guess": "ai",
+          "label": "This writing shows strong signs of AI involvement, but this check can be wrong. If you wrote it yourself, you can ask for a review.",
+          "model_score": 0.792,
+          "status": "decided",
+          "style_score": 0.5328,
+          "timestamp": "2026-11-09T05:20:32+00:00"
+        },
+        {
+          "content_id": "c8071ec0-2588-4c2a-af87-0ee437f5dff3",
+          "creator_id": "eval_5ea923427c_1_appeals_1",
+          "event": "appeal",
+          "reasoning": "  I wrote this and can show my earlier draft 1.  ",
+          "status": "under_review",
+          "timestamp": "2026-11-09T05:20:34+00:00"
+        }
+      ]
+    }
+  ],
+  "unknown": {
+    "http_status": 404,
+    "json": {
+      "error": "not_found",
+      "message": "No submission has that content_id."
+    }
+  }
+}
+```
+
+**5. Invalid submissions**
+
+```json
+[
+  {
+    "case": "malformed JSON",
+    "expected": 400,
+    "http_status": 400,
+    "json": {
+      "error": "invalid_input",
+      "message": "Send a JSON object."
+    }
+  },
+  {
+    "case": "oversized text",
+    "expected": 413,
+    "http_status": 413,
+    "json": {
+      "error": "text_too_large",
+      "message": "text must be at most 10000 characters."
+    }
+  }
+]
+```
+
 ## How I Used AI
 
 I worked with ChatGPT to help me really think of the ways I could go about the acceptance criteria and getting the endpoint to run with one signal

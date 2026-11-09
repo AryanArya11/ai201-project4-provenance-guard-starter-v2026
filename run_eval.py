@@ -1,190 +1,210 @@
 #!/usr/bin/env python3
-"""
-Run your five criteria three times each.  <- UNIT 8, MILESTONE 3
-
-    python app.py                              # in one terminal
-    python run_eval.py --label before          # in another
-    python run_eval.py --label after
-
-The attack set tests what staff thought to test. This tests what *you* thought
-to test, and the two rarely overlap much. Both count.
-
-Fill in `scenarios.py` first — that's where you say what each criterion needs
-run against it. A criterion about false positives needs your own writing. One
-about label coverage needs inputs across the score range.
-
-!! Three trials, and **your first signal runs a model, so identical input can
-score differently twice.** That's exactly why repeats matter here.
-
-This does the sending and the recording. It does not decide whether a trial
-passed — that depends on the criterion you wrote, so the Verdict column comes
-back blank.
-"""
+"""Run the five acceptance criteria against a running Provenance Guard service."""
 
 import argparse
 import datetime as dt
 import json
-import sys
-from pathlib import Path
+import statistics
+import uuid
+
+import requests
 
 import config
+import scenarios
+import scoring
 
-# Windows consoles often run a codepage that can't print every character in
-# this file's help text. Without this, `--help` ends in a UnicodeEncodeError
-# traceback instead of the help — which is a miserable first thing to hit.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(errors="replace")
-    except (AttributeError, ValueError):  # not a normal text stream
-        pass
-
-
-DEFAULT_URL = f"http://{config.HOST}:{config.PORT}"
+TARGETS = {
+    "1. False accusations": "At most 1 of 20",
+    "2. AI-human mean gap": "At least +0.20 on matched sets of 10",
+    "3. Label coverage": "3 of 3 live labels and a complete, exclusive score grid",
+    "4. Appeal logging": "10 of 10 valid appeals and one unknown-ID 404",
+    "5. Invalid submissions": "All expected JSON errors, no detector calls or decisions",
+}
 
 
-def bodies_for(scenario):
-    """
-    The request bodies one scenario sends.
+class Evaluation:
+    def __init__(self, url, timeout):
+        self.url = url.rstrip("/")
+        self.timeout = timeout
+        self.session = requests.Session()
+        self.prefix = f"eval_{uuid.uuid4().hex[:10]}"
 
-    A "texts" scenario gets a creator_id made up for it. A "bodies" scenario is
-    sent exactly as written, which is how a bad-input criterion says things a
-    string can't — no `text` field, a null, something enormous.
-    """
-    if scenario.get("bodies"):
-        return list(scenario["bodies"])
-    return [
-        {"text": text, "creator_id": f"eval_{scenario['name'][:12]}_{i}"}
-        for i, text in enumerate(scenario["texts"], 1)
+    def request(self, method, route, **kwargs):
+        response = self.session.request(method, f"{self.url}/{route}", timeout=self.timeout, **kwargs)
+        return {
+            "http_status": response.status_code,
+            "json": response.json() if "application/json" in response.headers.get("Content-Type", "") else None,
+        }
+
+    def submit(self, texts, name):
+        return [
+            self.request("POST", "submit", json={"text": text, "creator_id": f"{self.prefix}_{name}_{i}"})
+            for i, text in enumerate(texts, 1)
+        ]
+
+    def log(self):
+        return self.request("GET", "log")["json"]["entries"]
+
+    def false_accusations(self, human, trial):
+        responses = self.submit(human, f"{trial}_human")
+        scored = [r for r in responses if r["http_status"] == 200]
+        flagged = sum(r["json"]["guess"] == "ai" for r in scored)
+        passed = flagged <= 1 if len(scored) == 20 else None
+        return result(f"{flagged}/{len(scored)} scored", passed, responses)
+
+    def score_gap(self, human, ai, trial):
+        human_responses = self.submit(human[:10], f"{trial}_gap_human")
+        ai_responses = self.submit(ai, f"{trial}_gap_ai")
+        means = {}
+        for name, responses in (("human", human_responses), ("ai", ai_responses)):
+            scores = [r["json"]["confidence"] for r in responses if r["http_status"] == 200]
+            means[name] = statistics.mean(scores) if scores else None
+        complete = len(human_responses) == len(ai_responses) == 10 and all(
+            r["http_status"] == 200 for r in human_responses + ai_responses
+        )
+        gap = means["ai"] - means["human"] if None not in means.values() else None
+        observed = f"{gap:+.4f}" if gap is not None else "No mean gap"
+        return result(
+            observed, gap >= 0.20 if complete else None,
+            {"human": human_responses, "ai": ai_responses, "means": means, "gap": gap},
+        )
+
+    def labels(self, trial):
+        responses = self.submit([row["text"] for row in scenarios.CALIBRATION], f"{trial}_labels")
+        labels = sorted({r["json"]["guess"] for r in responses if r["http_status"] == 200})
+        human, ai = config.HUMAN_THRESHOLD, config.AI_THRESHOLD
+        grid = sorted({*(i / 1000 for i in range(1001)), human, ai})
+        matches = 0
+        for score in grid:
+            expected = [
+                guess for guess, matches_band in (
+                    ("human", score <= human),
+                    ("unsure", human < score < ai),
+                    ("ai", score >= ai),
+                ) if matches_band
+            ]
+            guess, label = scoring.score_to_label(score)
+            matches += expected == [guess] and bool(label)
+        complete = all(r["http_status"] == 200 for r in responses)
+        return result(
+            f"{len(labels)}/3 labels, {matches}/{len(grid)} grid",
+            len(labels) == 3 and matches == len(grid) if complete else None,
+            {"responses": responses, "grid_points": len(grid), "grid_matched": matches,
+             "boundaries": {str(score): scoring.score_to_label(score) for score in (human, ai)}},
+        )
+
+    def appeals(self, trial):
+        texts = [row["text"] for row in scenarios.CALIBRATION]
+        submissions = self.submit((texts * 3)[:10], f"{trial}_appeals")
+        original = {e.get("content_id"): e for e in self.log() if e["status"] == "decided"}
+        cases = []
+        for i, response in enumerate(submissions, 1):
+            if response["http_status"] != 200:
+                cases.append({"submission": response})
+                continue
+            content_id = response["json"]["content_id"]
+            reasoning = f"  I wrote this and can show my earlier draft {i}.  "
+            reply = self.request("POST", "appeal", json={"content_id": content_id, "reasoning": reasoning})
+            cases.append({"content_id": content_id, "reasoning": reasoning, "response": reply})
+
+        unknown = self.request("POST", "appeal", json={"content_id": self.prefix, "reasoning": "Please review."})
+        entries = self.log()
+        count = 0
+        for case in cases:
+            if "content_id" not in case:
+                continue
+            content_id = case["content_id"]
+            case["audit"] = [e for e in entries if e.get("content_id") == content_id]
+            reply = case["response"]
+            decisions = [e for e in case["audit"] if e["status"] == "decided"]
+            appeals = [e for e in case["audit"] if e["status"] == "under_review"]
+            count += (
+                reply["http_status"] == 200 and reply["json"]["status"] == "under_review"
+                and len(decisions) == 1 and decisions[0] == original.get(content_id)
+                and len(appeals) == 1 and appeals[0]["reasoning"] == case["reasoning"]
+            )
+        complete = all("content_id" in case for case in cases)
+        return result(f"{count}/10, unknown {unknown['http_status']}",
+                      count == 10 and unknown["http_status"] == 404 if complete else None,
+                      {"cases": cases, "unknown": unknown})
+
+    def invalid(self, trial):
+        old_length = len(self.log())
+        cases = [
+            {"case": name, "expected": expected, **self.request("POST", "submit", **kwargs)}
+            for name, kwargs, expected in scenarios.bad_inputs(f"{self.prefix}_{trial}_invalid")
+        ]
+        audit = self.log()[old_length:]
+        count = sum(
+            c["http_status"] == c["expected"] and isinstance(c["json"], dict) and bool(c["json"].get("error"))
+            for c in cases
+        )
+        decisions = sum(e["status"] == "decided" for e in audit)
+        return result(f"{count}/{len(cases)}, {decisions} decisions",
+                      count == len(cases) and decisions == 0,
+                      {"responses": cases, "audit": audit})
+
+
+def result(observed, passed, evidence):
+    return {"observed": observed, "passed": passed, "evidence": evidence}
+
+
+def verdict(trials):
+    if any(trial["passed"] is False for trial in trials):
+        return "MISSED"
+    if any(trial["passed"] is None for trial in trials):
+        return "INCOMPLETE"
+    return "MET"
+
+
+def write_report(rows, label):
+    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
+    suffix = f"_{label}" if label else ""
+    path = config.RESULTS_DIR / f"run_{stamp}{suffix}.md"
+    config.RESULTS_DIR.mkdir(exist_ok=True)
+    lines = [
+        f"# Run log{f' — {label}' if label else ''}", "",
+        "Produced by `run_eval.py::Evaluation`. The score grid calls `scoring.py::score_to_label`.",
+        "`verify.py` separately asserts that invalid inputs never call the detector.", "",
+        "| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |",
+        "|---|---|---|---|---|---|",
     ]
-
-
-def describe(body):
-    """A short, readable note of what was sent — for the report."""
-    if set(body) == {"text", "creator_id"} and isinstance(body.get("text"), str):
-        text = body["text"]
-        return text[:70] if text else "(empty text)"
-    return json.dumps(body)[:120]
+    for (name, target), trials in zip(TARGETS.items(), rows):
+        observed = " | ".join(trial["observed"] for trial in trials)
+        lines.append(f"| {name} | {target} | {observed} | {verdict(trials)} |")
+    for name, trials in zip(TARGETS, rows):
+        lines += ["", f"## {name}"]
+        for i, trial in enumerate(trials, 1):
+            lines += ["", f"### Trial {i}", "", "```json",
+                      json.dumps(trial["evidence"], indent=2), "```"]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote {path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--trials", type=int, default=3)
-    parser.add_argument("--label", default="")
-    parser.add_argument("--url", default=DEFAULT_URL)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--label", default="", choices=("", "before", "after"))
+    parser.add_argument("--url", default=f"http://{config.HOST}:{config.PORT}")
     parser.add_argument("--timeout", type=float, default=90.0)
     args = parser.parse_args()
-
-    try:
-        import requests
-    except ImportError:
-        print("The `requests` package isn't installed.\n"
-              "Run: pip install -r requirements.txt", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        import scenarios
-    except ImportError:
-        print("No scenarios.py found. Milestone 3 starts by filling it in.",
-              file=sys.stderr)
-        sys.exit(1)
-
-    problems = scenarios.validate()
-    if problems:
-        print("scenarios.py has problems:\n", file=sys.stderr)
-        for problem in problems:
-            print(f"  - {problem}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        requests.get(f"{args.url}/health", timeout=5)
-    except Exception:  # noqa: BLE001
-        print(f"Nothing answering at {args.url}. Start it:  python app.py",
-              file=sys.stderr)
-        sys.exit(1)
-
-    if args.trials < 3:
-        print(f"!! {args.trials} trial(s). The submission asks for three.\n")
-
-    rows = []
-    for scenario in scenarios.SCENARIOS:
-        print(f"\n{scenario['name']}  (criterion {scenario.get('criterion') or '—'})")
-
-        trials = []
-        for trial in range(1, args.trials + 1):
-            results = []
-            for i, body in enumerate(bodies_for(scenario), 1):
-                preview = describe(body)
-                try:
-                    response = requests.post(f"{args.url}/submit", json=body,
-                                             timeout=args.timeout)
-                    payload = response.json() if response.content else {}
-                    results.append({
-                        "status": response.status_code,
-                        "guess": payload.get("guess"),
-                        "confidence": payload.get("confidence"),
-                        "model_score": payload.get("model_score"),
-                        "style_score": payload.get("style_score"),
-                        "label": payload.get("label"),
-                        "sent": preview,
-                    })
-                except Exception as exc:  # noqa: BLE001
-                    results.append({"status": None, "error": f"{type(exc).__name__}: {exc}",
-                                    "sent": preview})
-
-            trials.append(results)
-            guesses = [r.get("guess") or "—" for r in results]
-            print(f"  trial {trial}: {', '.join(guesses)}")
-
-        rows.append({"scenario": scenario, "trials": trials})
-
-    write_report(rows, args)
-
-
-def write_report(rows, args):
-    config.RESULTS_DIR.mkdir(exist_ok=True)
-    stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
-    label = f"_{args.label}" if args.label else ""
-    path = config.RESULTS_DIR / f"run_{stamp}{label}.md"
-
-    n = args.trials
-    headers = " | ".join(f"Run {i}" for i in range(1, n + 1))
-    divider = "|".join(["---"] * n)
-
-    lines = [
-        f"# Run log{f' — {args.label}' if args.label else ''}",
-        "",
-        "- Produced by: `run_eval.py::main`",
-        "- Service: `app.py::submit` · scoring: `scoring.py::combine_signals`",
-        f"- {n} trials per criterion · {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        "",
-        "Fill in Target from `criteria.md`, and Run and Verdict from the output",
-        "underneath. Whether a trial passed depends on the criterion you wrote.",
-        "",
-        f"| Criterion | Target | {headers} | Verdict |",
-        f"|---|---|{divider}|---|",
-    ]
-
-    for row in rows:
-        scenario = row["scenario"]
-        number = scenario.get("criterion")
-        name = f"{number}. {scenario['name']}" if number else scenario["name"]
-        lines.append(f"| {name} |  | {' | '.join([' '] * n)} |  |")
-
-    lines += ["", "---", "", "## What actually came back", "",
-              "Real output. Paste the relevant parts into your README — the rubric",
-              "asks for the actual JSON, not a description of it.", ""]
-
-    for row in rows:
-        scenario = row["scenario"]
-        lines += [f"### {scenario['name']}", ""]
-        for trial_number, results in enumerate(row["trials"], 1):
-            lines += [f"**Trial {trial_number}**", "", "```json",
-                      json.dumps(results, indent=2), "```", ""]
-
-    path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"\nWrote {path.relative_to(config.ROOT)}")
-    print("Commit it. It's the evidence the test actually happened.")
+    human, ai = scenarios.writing_inputs()
+    evaluation = Evaluation(args.url, args.timeout)
+    health = evaluation.request("GET", "health")
+    if health["http_status"] != 200 or not health["json"]["rate_limiting"]:
+        parser.error("start app.py with rate limiting enabled")
+    rows = [[] for _ in TARGETS]
+    for trial in range(1, 4):
+        results = [
+            evaluation.false_accusations(human, trial),
+            evaluation.score_gap(human, ai, trial),
+            evaluation.labels(trial),
+            evaluation.appeals(trial),
+            evaluation.invalid(trial),
+        ]
+        for row, measured in zip(rows, results):
+            row.append(measured)
+        print(f"Trial {trial}: " + " | ".join(r["observed"] for r in results))
+    write_report(rows, args.label)
 
 
 if __name__ == "__main__":

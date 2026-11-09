@@ -86,10 +86,12 @@ class BackendChecks(unittest.TestCase):
         self.assertEqual([entry['status'] for entry in audit.read_entries()], ['rejected'] * 12)
 
     def test_malformed_json(self):
-        for route in ['/submit','/appeal']:
-            response=self.client.post(route,data='{broken',content_type='application/json')
-            self.assertEqual(response.status_code,400)
-            self.assertTrue(response.is_json)
+        with patch.object(detector, 'model_signal') as signal:
+            for route in ['/submit', '/appeal']:
+                response = self.client.post(route, data='{broken', content_type='application/json')
+                self.assertEqual(response.status_code, 400)
+                self.assertTrue(response.is_json)
+            signal.assert_not_called()
 
     def test_oversized_text_and_request(self):
         with patch.object(detector,'model_signal') as signal:
