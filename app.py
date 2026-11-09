@@ -40,23 +40,13 @@ app.config["MAX_CONTENT_LENGTH"] = 100_000
 
 @app.errorhandler(413)
 def request_too_large(exc):
+    if request.endpoint == "submit":
+        return reject_submission(None, "request_too_large", "The request body is too large.", 413)
     return jsonify(error="request_too_large", message="The request body is too large."), 413
 
 
 # ── Rate limiting — UNIT 8 ────────────────────────────────────────────────────
-# Off until you turn it on. In unit 8, Milestone 1:
-#
-#   1. Set RATE_LIMITING_ENABLED = True in config.py (or AI201_RATE_LIMITS=1)
-#   2. Choose your numbers there
-#   3. Uncomment the @limiter.limit(...) line on /submit below
-#
-# The order doesn't matter. While limiting is off, that decorator is a no-op
-# that quietly does nothing, so uncommenting it early costs you nothing — but
-# it also means no 429 until you've done step 1.
-#
-# The storage backend is preconfigured, which stops Flask-Limiter printing a
-# warning on every start. In-memory is right for one laptop and wrong for
-# anything real — a restart forgets every count.
+# A process-local limiter for the course prototype. Restarting clears its counters.
 
 class _LimiterOff:
     """
@@ -66,6 +56,9 @@ class _LimiterOff:
     untouched, so uncommenting the line before you flip the setting is
     harmless instead of a crash on startup.
     """
+
+    def reset(self):
+        pass
 
     def limit(self, *args, **kwargs):
         return lambda view: view
@@ -77,23 +70,11 @@ if config.RATE_LIMITING_ENABLED:
     from flask_limiter.util import get_remote_address
 
     def rate_limit_key():
-        """
-        Who a request counts against.
-
-        Falling back to the caller's address is the easy version. Unit 8's
-        stretch asks about per-creator limits instead — and the difference
-        matters: one script can look like a thousand callers, and one household
-        can look like one.
-        """
         payload = request.get_json(silent=True)
-        # A body that parses as JSON but isn't an object — a bare list or
-        # string — has no .get. Without this guard the key function raises
-        # BEFORE the route runs, and a malformed request becomes a 500 that
-        # looks like your handler crashed when your handler never ran.
-        if not isinstance(payload, dict):
-            return get_remote_address()
-        creator = payload.get("creator_id")
-        return creator if isinstance(creator, str) and creator.strip() else get_remote_address()
+        creator = payload.get("creator_id") if isinstance(payload, dict) else None
+        if isinstance(creator, str) and 0 < len(creator) <= 200 and creator.strip():
+            return f"creator:{creator.strip()}"
+        return f"address:{get_remote_address()}"
 
     limiter = Limiter(
         key_func=rate_limit_key,
@@ -113,8 +94,9 @@ if config.RATE_LIMITING_ENABLED:
         if not isinstance(payload, dict):
             payload = {}
         audit.log_rejection(
-            creator_id=payload.get("creator_id", "unknown"),
+            creator_id=audit_creator(payload.get("creator_id")),
             reason="rate_limited",
+            http_status=429,
             limit=str(exc.description),
         )
         return jsonify({
@@ -159,30 +141,52 @@ def health():
 
 # Submission and appeal routes
 
+def audit_creator(creator_id):
+    if isinstance(creator_id, str) and len(creator_id) <= 200:
+        return creator_id.strip() or "unknown"
+    return "unknown"
+
+
+def reject_submission(creator_id, error, message, status=400, *, reason=None):
+    audit.log_rejection(
+        creator_id=audit_creator(creator_id),
+        reason=reason or error,
+        http_status=status,
+        message=message,
+    )
+    return jsonify(error=error, message=message), status
+
+
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """Validate a submission, run both signals, log the decision, and return its label."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        return jsonify(error="invalid_input", message="Send a JSON object."), 400
+        return reject_submission(None, "invalid_input", "Send a JSON object.")
     text = payload.get("text")
     creator_id = payload.get("creator_id")
     if not isinstance(text, str) or not text.strip():
-        return jsonify(error="invalid_input", message="text must be a nonempty string."), 400
+        return reject_submission(creator_id, "invalid_input", "text must be a nonempty string.")
     if not isinstance(creator_id, str) or not creator_id.strip():
-        return jsonify(error="invalid_input", message="creator_id must be a nonempty string."), 400
+        return reject_submission(creator_id, "invalid_input", "creator_id must be a nonempty string.")
     if len(text) > config.MAX_TEXT_CHARACTERS:
-        return jsonify(error="text_too_large", message="text must be at most 10000 characters."), 413
+        return reject_submission(creator_id, "text_too_large", "text must be at most 10000 characters.", 413)
     if len(creator_id) > 200:
-        return jsonify(error="invalid_input", message="creator_id must be at most 200 characters."), 400
+        return reject_submission(creator_id, "invalid_input", "creator_id must be at most 200 characters.")
     try:
         model_score = detector.model_signal(text)
     except detector.DetectorUnavailable:
         app.logger.exception("The local detector could not load")
-        return jsonify(error="detector_unavailable", message="The local detector is unavailable. Install the dependencies and run python detector.py."), 503
+        return reject_submission(
+            creator_id, "detector_unavailable",
+            "The local detector is unavailable. Install the dependencies and run python detector.py.", 503,
+        )
     except ValueError:
-        return jsonify(error="invalid_input", message="Text is too short to score. Send a few sentences."), 400
+        return reject_submission(
+            creator_id, "invalid_input", "Text is too short to score. Send a few sentences.",
+            reason="text_too_short",
+        )
     style_score = stylometry.style_signal(text)
     combined_score = scoring.combine_signals(model_score, style_score)
     guess, label = scoring.score_to_label(combined_score)

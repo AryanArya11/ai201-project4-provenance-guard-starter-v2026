@@ -14,7 +14,7 @@ import config
 import detector
 import scoring
 import stylometry
-from app import app
+from app import app, limiter
 
 
 class BackendChecks(unittest.TestCase):
@@ -26,6 +26,7 @@ class BackendChecks(unittest.TestCase):
             patcher = patch.object(config, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        limiter.reset()
         self.client = app.test_client()
         self.body = {'text': 'I wrote this after class. It took a while to get right.',
                      'creator_id': 'writer-1'}
@@ -82,7 +83,7 @@ class BackendChecks(unittest.TestCase):
                 self.assertEqual(response.status_code,400,(body,response.json))
                 self.assertEqual(response.json['error'],'invalid_input')
             signal.assert_not_called()
-        self.assertEqual(audit.read_entries(),[])
+        self.assertEqual([entry['status'] for entry in audit.read_entries()], ['rejected'] * 12)
 
     def test_malformed_json(self):
         for route in ['/submit','/appeal']:
@@ -98,7 +99,7 @@ class BackendChecks(unittest.TestCase):
             self.assertEqual(response.status_code,413)
             self.assertTrue(response.is_json)
             signal.assert_not_called()
-        self.assertEqual(audit.read_entries(),[])
+        self.assertEqual([entry['status'] for entry in audit.read_entries()], ['rejected'] * 2)
 
     def test_ten_appeals_preserve_decisions(self):
         for i in range(10):
@@ -137,14 +138,14 @@ class BackendChecks(unittest.TestCase):
     def test_short_input_error(self):
         with patch.object(detector,'model_signal',side_effect=ValueError('short')):
             self.assertEqual(self.client.post('/submit',json=self.body).status_code,400)
-        self.assertEqual(audit.read_entries(),[])
+        self.assertEqual([entry['status'] for entry in audit.read_entries()], ['rejected'] * 1)
 
     def test_detector_unavailable(self):
         with patch.object(detector,'model_signal',side_effect=detector.DetectorUnavailable('offline')):
             with self.assertLogs(app.logger,level='ERROR'):
                 response=self.client.post('/submit',json=self.body)
         self.assertEqual(response.status_code,503)
-        self.assertEqual(audit.read_entries(),[])
+        self.assertEqual([entry['status'] for entry in audit.read_entries()], ['rejected'] * 1)
 
     def test_style_features(self):
         self.assertEqual(stylometry.type_token_ratio('cat cat dog'),2/3)
